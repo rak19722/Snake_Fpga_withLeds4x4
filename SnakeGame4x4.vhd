@@ -7,18 +7,18 @@ entity Snake_LED is
         clk      : in  STD_LOGIC;
         reset    : in  STD_LOGIC;
         switches : in  STD_LOGIC_VECTOR(3 downto 0);  -- 0: up, 1: down, 2: left, 3: right
-        rows     : out STD_LOGIC_VECTOR(3 downto 0);  -- filas (ánodos)
-        cols     : out STD_LOGIC_VECTOR(3 downto 0)   -- columnas (cátodos)
+        rows     : out STD_LOGIC_VECTOR(3 downto 0);  -- rows (anodes)
+        cols     : out STD_LOGIC_VECTOR(3 downto 0)   -- columns (cathodes)
     );
 end Snake_LED;
 
 architecture Behavioral of Snake_LED is
 
-    -- Parámetros
+    -- Parameters
     constant BOARD_SIZE       : integer := 4;
     constant MAX_SNAKE_LENGTH : integer := 16;
 
-    -- Tipos
+    -- Types
     type position_t is record
         x : integer range 0 to BOARD_SIZE-1;
         y : integer range 0 to BOARD_SIZE-1;
@@ -26,7 +26,7 @@ architecture Behavioral of Snake_LED is
 
     type snake_array_t is array (0 to MAX_SNAKE_LENGTH-1) of position_t;
 
-    -- Señales del juego
+    -- Game signals
     signal snake        : snake_array_t;
     signal snake_length : integer range 1 to MAX_SNAKE_LENGTH := 1;
     signal direction    : integer range 0 to 3 := 0;  -- 0: up, 1: down, 2: left, 3: right
@@ -34,20 +34,20 @@ architecture Behavioral of Snake_LED is
     signal game_over    : STD_LOGIC := '0';
 
     -- Timers
-    signal move_counter : integer range 0 to 25000000 := 0;  -- ~500ms a 50MHz
-    signal mux_counter  : integer range 0 to 50000 := 0;     -- ~1ms entre filas
+    signal move_counter : integer range 0 to 25000000 := 0;  -- ~500ms at 50MHz
+    signal mux_counter  : integer range 0 to 50000 := 0;     -- ~1ms between rows
     signal mux_row      : integer range 0 to 3 := 0;
 
-    -- "Aleatorio" para la comida
+    -- Pseudo-random for food placement
     signal random_counter : unsigned(7 downto 0) := (others => '0');
 
-    -- Tablero 4x4 aplanado (fila*4 + columna)
+    -- Flattened 4x4 board (row*4 + column)
     signal board : STD_LOGIC_VECTOR(15 downto 0) := (others => '0');
 
 begin
 
     --------------------------------------------------------------------
-    -- Multiplexado de la matriz 4x4
+    -- LED matrix multiplexing (4x4)
     --------------------------------------------------------------------
     process(clk, reset)
         variable row_vec : STD_LOGIC_VECTOR(3 downto 0);
@@ -57,21 +57,22 @@ begin
             mux_counter <= 0;
             mux_row     <= 0;
             rows        <= (others => '0');
-            cols        <= (others => '1');  -- todo apagado (cátodos en '1')
+            cols        <= (others => '1');  -- all LEDs off (cathodes at '1')
+
         elsif rising_edge(clk) then
             mux_counter <= mux_counter + 1;
             if mux_counter = 50000 then  -- ~1ms
                 mux_counter <= 0;
 
-                -- Seleccionar siguiente fila
+                -- Select next row
                 mux_row <= (mux_row + 1) mod 4;
 
-                -- Una sola fila activa (ánodo en '1')
+                -- One active row at a time (anode = '1')
                 row_vec := (others => '0');
                 row_vec(mux_row) := '1';
                 rows <= row_vec;
 
-                -- Columnas: '0' en cátodo para encender LED
+                -- Columns: '0' on cathode turns on LED
                 col_vec := (others => '1');
                 for i in 0 to 3 loop
                     if board(mux_row*4 + i) = '1' then
@@ -85,7 +86,7 @@ begin
 
 
     --------------------------------------------------------------------
-    -- Lógica del juego (snake, comida, tablero)
+    -- Game logic (snake movement, food, collisions, board update)
     --------------------------------------------------------------------
     process(clk, reset)
         variable new_head  : position_t;
@@ -93,7 +94,7 @@ begin
         variable b_vec     : STD_LOGIC_VECTOR(15 downto 0);
     begin
         if reset = '1' then
-            -- Estado inicial
+            -- Initial state
             snake_length <= 1;
             snake(0)     <= (x => 0, y => 0);
             direction    <= 0;  -- up
@@ -106,10 +107,10 @@ begin
         elsif rising_edge(clk) then
 
             ----------------------------------------------------------------
-            -- Mientras no haya game_over, se permite cambiar dirección y mover
+            -- If not game_over, allow direction change and movement
             ----------------------------------------------------------------
             if game_over = '0' then
-                -- Cambiar dirección con switches (uno a la vez)
+                -- Change direction (one switch at a time)
                 if switches(0) = '1' then
                     direction <= 0;  -- up
                 elsif switches(1) = '1' then
@@ -120,19 +121,14 @@ begin
                     direction <= 3;  -- right
                 end if;
 
-                -- Timer de movimiento
+                -- Movement timer
                 move_counter <= move_counter + 1;
 
-                if move_counter = 25000000 then  -- ~500ms a 50MHz
-                    move_countif move_counter = 25000000 then  -- ~500ms a 50MHz
-                    move_counter := 0;  -- variable asignada dentro del ciclo (sólo aquí)
-                    move_counter <= 0;  -- y señal para síntesis
+                if move_counter = 25000000 then  -- ~500ms at 50MHz
+                    move_counter := 0;  -- variable assignment (simulation only)
+                    move_counter <= 0;  -- signal assignment (for synthesis)
 
-                    -- Calcular nueva cabeza (wrap-around manual)
-                    new_head := snake(0);er := 0;  -- variable asignada dentro del ciclo (sólo aquí)
-                    move_counter <= 0;  -- y señal para síntesis
-
-                    -- Calcular nueva cabeza (wrap-around manual)
+                    -- Compute new snake head with wrap-around
                     new_head := snake(0);
 
                     case direction is
@@ -165,7 +161,7 @@ begin
                             end if;
                     end case;
 
-                    -- Verificar colisión con el cuerpo
+                    -- Detect collision with body
                     collision := false;
                     for i in 0 to MAX_SNAKE_LENGTH-1 loop
                         if i < snake_length then
@@ -179,7 +175,7 @@ begin
                         game_over <= '1';
 
                     else
-                        -- Desplazar cuerpo (de cola a cabeza)
+                        -- Shift the body (tail to head)
                         for i in MAX_SNAKE_LENGTH-1 downto 1 loop
                             if i < snake_length then
                                 snake(i) <= snake(i-1);
@@ -187,37 +183,36 @@ begin
                         end loop;
                         snake(0) <= new_head;
 
-                        -- ¿Comió la comida?
+                        -- Check if food was eaten
                         if (new_head.x = food.x) and (new_head.y = food.y) then
-                            -- crecer
+                            -- Grow snake
                             if snake_length < MAX_SNAKE_LENGTH then
                                 snake_length <= snake_length + 1;
                             end if;
 
-                            -- Nueva posición de comida pseudo-aleatoria
+                            -- New pseudo-random food position
                             random_counter <= random_counter + 1;
                             food.x <= to_integer(random_counter(3 downto 2)) mod BOARD_SIZE;
                             food.y <= to_integer(random_counter(1 downto 0)) mod BOARD_SIZE;
                         end if;
                     end if;
-                end if; -- fin del if move_counter
-
-            end if; -- fin del if game_over = '0'
+                end if; -- movement tick
+            end if; -- not game_over
 
 
             ----------------------------------------------------------------
-            -- Actualizar tablero (se dibuja siempre, incluso en game_over)
+            -- Update LED board (shown even during game_over)
             ----------------------------------------------------------------
             b_vec := (others => '0');
 
-            -- Cuerpo de la serpiente
+            -- Draw snake
             for i in 0 to MAX_SNAKE_LENGTH-1 loop
                 if i < snake_length then
                     b_vec(snake(i).y * 4 + snake(i).x) := '1';
                 end if;
             end loop;
 
-            -- Comida parpadeando (solo si no hay game_over)
+            -- Blinking food (only if not game over)
             if game_over = '0' then
                 if move_counter < 12500000 then
                     b_vec(food.y * 4 + food.x) := '1';
